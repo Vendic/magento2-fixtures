@@ -17,7 +17,8 @@ use Magento\TestFramework\Helper\Bootstrap;
  */
 class AddressBuilder
 {
-    public const CITY_REPLACE_PATTERN = '/[^\p{L}\p{M}\s\'-]/um';
+    public const CITY_REPLACE_PATTERN = '/[^\p{L}\p{M}\s\'-]/u';
+    public const PHONE_REPLACE_PATTERN = '/[^\d\s+\-()]/u';
 
     /**
      * @var AddressInterface
@@ -199,13 +200,14 @@ class AddressBuilder
         }
 
         $city = preg_replace(static::CITY_REPLACE_PATTERN, '', $faker->city ?? '');
+        $phoneNumber = preg_replace(static::PHONE_REPLACE_PATTERN, '', $faker->phoneNumber ?? '');
 
         $regionId = $objectManager->create(Region::class)->loadByName($region, $countryCode)->getId();
 
         /** @var AddressInterface $address */
         $address = $objectManager->create(AddressInterface::class);
         $address
-            ->setTelephone($faker->phoneNumber)
+            ->setTelephone($phoneNumber)
             ->setPostcode($faker->postcode)
             ->setCountryId($countryCode)
             ->setCity($city)
