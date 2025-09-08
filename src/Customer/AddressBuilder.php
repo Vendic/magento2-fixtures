@@ -200,7 +200,11 @@ class AddressBuilder
         }
 
         $city = preg_replace(static::CITY_REPLACE_PATTERN, '', $faker->city ?? '');
-        $phoneNumber = preg_replace(static::PHONE_REPLACE_PATTERN, '', $faker->phoneNumber ?? '');
+        $phoneNumber = preg_replace(
+            static::PHONE_REPLACE_PATTERN,
+            '',
+            mb_substr($faker->phoneNumber ?? '', 0, 20)
+        );
 
         $regionId = $objectManager->create(Region::class)->loadByName($region, $countryCode)->getId();
 
