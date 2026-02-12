@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace TddWizard\Fixtures\Sales;
 
+use Magento\Customer\Api\Data\CustomerInterface;
 use Magento\Sales\Model\Order;
 use TddWizard\Fixtures\Catalog\ProductBuilder;
 use TddWizard\Fixtures\Checkout\CartBuilder;
@@ -36,8 +37,15 @@ class OrderBuilder
      */
     private $shippingMethod;
 
-    final public function __construct()
-    {
+    /**
+     * @var CustomerInterface|null
+     */
+    private $customer;
+
+    final public function __construct(
+        CustomerInterface|null $customer = null
+    ) {
+        $this->customer = $customer;
     }
 
     /**
@@ -48,6 +56,11 @@ class OrderBuilder
     public static function anOrder(): OrderBuilder
     {
         return new static();
+    }
+
+    public static function anOrderFor(CustomerInterface $customer): OrderBuilder
+    {
+        return new static($customer);
     }
 
     public function withProducts(ProductBuilder ...$productBuilders): OrderBuilder
@@ -62,6 +75,7 @@ class OrderBuilder
     {
         $builder = clone $this;
         $builder->customerBuilder = $customerBuilder;
+        $builder->customer = null;
 
         return $builder;
     }
@@ -113,14 +127,8 @@ class OrderBuilder
             $builder->productBuilders
         );
 
-        if (empty($builder->customerBuilder)) {
-            // init customer
-            $builder->customerBuilder = CustomerBuilder::aCustomer()
-                ->withAddresses(AddressBuilder::anAddress()->asDefaultBilling()->asDefaultShipping());
-        }
-
         // log customer in
-        $customer = $builder->customerBuilder->build();
+        $customer = $builder->customer ?? $builder->createCustomer();
         $customerFixture = new CustomerFixture($customer);
         $customerFixture->login();
 
@@ -148,5 +156,16 @@ class OrderBuilder
         $customerFixture->logout();
 
         return $order;
+    }
+
+    private function createCustomer(): CustomerInterface
+    {
+        if (empty($this->customerBuilder)) {
+            // init customer
+            $this->customerBuilder = CustomerBuilder::aCustomer()
+                ->withAddresses(AddressBuilder::anAddress()->asDefaultBilling()->asDefaultShipping());
+        }
+
+        return $this->customerBuilder->build();
     }
 }
