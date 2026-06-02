@@ -168,15 +168,41 @@ class CustomerCheckout
         $this->savePayment();
         /** @var Quote $reloadedQuote */
         $reloadedQuote = $this->quoteRepository->get($this->cart->getQuote()->getId());
+        // CartBuilder::forCurrentSession() builds a guest-session cart (customer_id 0)
+        // even after the CustomerFixture logs the customer in. Magento's hardened
+        // Address\Validator\Customer then rejects submit because the quote address's
+        // customer_id (0) doesn't match the customer address it was imported from.
+        // Stamp the logged-in customer onto the quote and its already-imported
+        // addresses so customer_id matches, without the address-resetting side
+        // effects of Quote::assignCustomer().
+        $customer = $this->cart->getCustomerSession()->getCustomerData();
+        if ($customer && $customer->getId()) {
+            $customerId = (int) $customer->getId();
+            $reloadedQuote->setCustomerId($customerId);
+            $reloadedQuote->setCustomerIsGuest(false);
+            $reloadedQuote->setCustomerEmail($customer->getEmail());
+            foreach ([$reloadedQuote->getBillingAddress(), $reloadedQuote->getShippingAddress()] as $address) {
+                if ($address) {
+                    $address->setCustomerId($customerId);
+                }
+            }
+        }
         // Collect missing totals, like shipping
         $reloadedQuote->collectTotals();
-        $order = $this->quoteManagement->submit($reloadedQuote);
-        if (! $order instanceof Order) {
-            $returnType = is_object($order) ? get_class($order) : gettype($order);
-            throw new \RuntimeException('QuoteManagement::submit() returned ' . $returnType . ' instead of Order');
+        // Clear the checkout session even when submit() throws, so a failed order
+        // placement doesn't leave a stale customer/quote in the session and poison
+        // later tests (NoSuchEntityException: cartId / duplicate-customer cascade).
+        // See tddwizard/magento2-fixtures#95 and PR #97.
+        try {
+            $order = $this->quoteManagement->submit($reloadedQuote);
+            if (! $order instanceof Order) {
+                $returnType = is_object($order) ? get_class($order) : gettype($order);
+                throw new \RuntimeException('QuoteManagement::submit() returned ' . $returnType . ' instead of Order');
+            }
+            return $order;
+        } finally {
+            $this->cart->getCheckoutSession()->clearQuote();
         }
-        $this->cart->getCheckoutSession()->clearQuote();
-        return $order;
     }
 
     /**
